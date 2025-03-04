@@ -1,0 +1,6 @@
+CREATE TABLE tipo_cambio (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    moneda VARCHAR(10) NOT NULL UNIQUE,
+    compra DECIMAL(10,2) NOT NULL,
+    venta DECIMAL(10,2) NOT NULL
+);
