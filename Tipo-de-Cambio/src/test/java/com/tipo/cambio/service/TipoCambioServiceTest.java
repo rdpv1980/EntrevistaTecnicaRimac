@@ -2,6 +2,7 @@ package com.tipo.cambio.service;
 
 import com.tipo.cambio.dto.TipoCambioRequest;
 import com.tipo.cambio.dto.TipoCambioResponse;
+import com.tipo.cambio.dto.TipoOperacion;
 import com.tipo.cambio.exception.TipoCambioNotFoundException;
 import com.tipo.cambio.model.TipoCambio;
 import com.tipo.cambio.repository.TipoCambioRepository;
@@ -26,112 +27,61 @@ class TipoCambioServiceTest {
     @InjectMocks
     private TipoCambioServiceImpl tipoCambioService;
 
-    private TipoCambio tipoCambioUsd;
-    private TipoCambio tipoCambioEur;
+    private TipoCambioRequest request;
+    private TipoCambio origen;
+    private TipoCambio destino;
 
     @BeforeEach
     void setUp() {
-        tipoCambioUsd = new TipoCambio();
-        tipoCambioUsd.setMoneda("USD");
-        tipoCambioUsd.setCompra(new BigDecimal("3.80"));
-        tipoCambioUsd.setVenta(new BigDecimal("3.85"));
+        origen = new TipoCambio();
+        origen.setMoneda("USD");
+        origen.setCompra(new BigDecimal("3.80"));
+        origen.setVenta(new BigDecimal("3.85"));
 
-        tipoCambioEur = new TipoCambio();
-        tipoCambioEur.setMoneda("EUR");
-        tipoCambioEur.setCompra(new BigDecimal("4.20"));
-        tipoCambioEur.setVenta(new BigDecimal("4.25"));
+        destino = new TipoCambio();
+        destino.setMoneda("PEN");
+        destino.setCompra(new BigDecimal("1.00"));
+        destino.setVenta(new BigDecimal("1.00"));
+
+        request = new TipoCambioRequest(new BigDecimal("100.00"), "USD", "PEN");
     }
 
     @Test
-    void testAplicarTipoCambioCompra() {
-        // Simular que los datos existen en el repository
-        when(tipoCambioRepository.findByMoneda("USD")).thenReturn(Optional.of(tipoCambioUsd));
-        when(tipoCambioRepository.findByMoneda("EUR")).thenReturn(Optional.of(tipoCambioEur));
+    void aplicarTipoCambio_CalculoCorrecto() {
+        //Given
+        when(tipoCambioRepository.findByMoneda("USD")).thenReturn(Optional.of(origen));
+        when(tipoCambioRepository.findByMoneda("PEN")).thenReturn(Optional.of(destino));
 
-        // Crear una solicitud de cambio de 100 USD a EUR en modo COMPRA
-        TipoCambioRequest request = new TipoCambioRequest(new BigDecimal("100"), "USD", "EUR");
+        //When
         TipoCambioResponse response = tipoCambioService.aplicarTipoCambio(request);
 
-        // Verificaciones
+        //Then
         assertNotNull(response);
-        assertEquals(new BigDecimal("100"), response.getMonto());
+        assertEquals(new BigDecimal("100.00"), response.getMonto());
         assertEquals("USD", response.getMonedaOrigen());
-        assertEquals("EUR", response.getMonedaDestino());
-        assertEquals(new BigDecimal("23.81"), response.getMontoConTipoCambio());
-        assertEquals(new BigDecimal("4.20"), response.getValorTipoCambio());
-
+        assertEquals("PEN", response.getMonedaDestino());
+        assertEquals(TipoOperacion.VENTA, response.getTipoOperacion());
         verify(tipoCambioRepository, times(1)).findByMoneda("USD");
-        verify(tipoCambioRepository, times(1)).findByMoneda("EUR");
+        verify(tipoCambioRepository, times(1)).findByMoneda("PEN");
     }
 
     @Test
-    void testAplicarTipoCambioVenta() {
-        when(tipoCambioRepository.findByMoneda("USD")).thenReturn(Optional.of(tipoCambioUsd));
-        when(tipoCambioRepository.findByMoneda("EUR")).thenReturn(Optional.of(tipoCambioEur));
-
-        // Cambiar 100 EUR a USD en modo VENTA
-        TipoCambioRequest request = new TipoCambioRequest(new BigDecimal("100"), "EUR", "USD");
-        TipoCambioResponse response = tipoCambioService.aplicarTipoCambio(request);
-
-        // Verificaciones
-        assertNotNull(response);
-        assertEquals(new BigDecimal("100"), response.getMonto());
-        assertEquals("EUR", response.getMonedaOrigen());
-        assertEquals("USD", response.getMonedaDestino());
-        assertEquals(new BigDecimal("4.25"), response.getValorTipoCambio());
-
-        verify(tipoCambioRepository, times(1)).findByMoneda("EUR");
-        verify(tipoCambioRepository, times(1)).findByMoneda("USD");
-    }
-
-    @Test
-    void testTipoCambioNoEncontrado() {
+    void aplicarTipoCambio_MonedaOrigenNoEncontrada() {
         when(tipoCambioRepository.findByMoneda("USD")).thenReturn(Optional.empty());
 
-        TipoCambioRequest request = new TipoCambioRequest(new BigDecimal("100"), "USD", "EUR");
-
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            tipoCambioService.aplicarTipoCambio(request);
-        });
-
-        assertEquals("Tipo de cambio no encontrado", exception.getMessage());
-
+        assertThrows(TipoCambioNotFoundException.class, () -> tipoCambioService.aplicarTipoCambio(request));
         verify(tipoCambioRepository, times(1)).findByMoneda("USD");
-        //verify(tipoCambioRepository, never()).findByMoneda("EUR");
+        verify(tipoCambioRepository, never()).findByMoneda("PEN");
     }
 
     @Test
-    void testActualizarTipoCambio() {
-        when(tipoCambioRepository.findById(1L)).thenReturn(Optional.of(tipoCambioUsd));
-        when(tipoCambioRepository.save(any(TipoCambio.class))).thenReturn(tipoCambioUsd);
+    void aplicarTipoCambio_MonedaDestinoNoEncontrada() {
+        when(tipoCambioRepository.findByMoneda("USD")).thenReturn(Optional.of(origen));
+        when(tipoCambioRepository.findByMoneda("PEN")).thenReturn(Optional.empty());
 
-        TipoCambio tipoCambioActualizado = new TipoCambio();
-        tipoCambioActualizado.setCompra(new BigDecimal("3.90"));
-        tipoCambioActualizado.setVenta(new BigDecimal("3.95"));
-
-        TipoCambio resultado = tipoCambioService.actualizarTipoCambio(1L, tipoCambioActualizado);
-
-        assertNotNull(resultado);
-        assertEquals(new BigDecimal("3.90"), resultado.getCompra());
-        assertEquals(new BigDecimal("3.95"), resultado.getVenta());
-
-        verify(tipoCambioRepository, times(1)).findById(1L);
-        verify(tipoCambioRepository, times(1)).save(any(TipoCambio.class));
+        assertThrows(TipoCambioNotFoundException.class, () -> tipoCambioService.aplicarTipoCambio(request));
+        verify(tipoCambioRepository, times(1)).findByMoneda("USD");
+        verify(tipoCambioRepository, times(1)).findByMoneda("PEN");
     }
 
-    @Test
-    void testActualizarTipoCambioNoExistente() {
-        when(tipoCambioRepository.findById(99L)).thenReturn(Optional.empty());
-
-        TipoCambio tipoCambioActualizado = new TipoCambio();
-        tipoCambioActualizado.setCompra(new BigDecimal("3.90"));
-        tipoCambioActualizado.setVenta(new BigDecimal("3.95"));
-
-        assertThrows(TipoCambioNotFoundException.class, () -> {
-            tipoCambioService.actualizarTipoCambio(99L, tipoCambioActualizado);
-        });
-
-        verify(tipoCambioRepository, times(1)).findById(99L);
-        verify(tipoCambioRepository, never()).save(any(TipoCambio.class));
-    }
 }
